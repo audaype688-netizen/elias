@@ -276,7 +276,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton(f"{status_emoji} التلقائي", callback_data="toggle_schedule")
             ],
             [
-                InlineKeyboardButton("📤 نشر نص", callback_data="post_custom_text"),
+                InlineKeyboardButton("📤 نشر ", callback_data="post_custom_text"),
                 InlineKeyboardButton("🖼️ نشر صورة", callback_data="post_custom_photo")
             ],
             [
