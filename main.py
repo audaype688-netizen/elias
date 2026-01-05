@@ -27,15 +27,12 @@ try:
         filters,
         JobQueue,
     )
-    # مكتبة المراقبة للتحديث التلقائي
-    from watchdog.observers import Observer
-    from watchdog.events import FileSystemEventHandler
 except ImportError as e:
     print("="*50)
     missing_lib = str(e).split("'")[1] if "'" in str(e) else e
     print(f"❌ خطأ: المكتبات المطلوبة غير مثبتة.")
     print(f"المكتبة الناقصة: {missing_lib}")
-    print("تثبيت: pip install python-telegram-bot==20.7 python-dotenv watchdog")
+    print("تثبيت: pip install python-telegram-bot==20.7 python-dotenv")
     print("="*50)
     exit(1)
 
@@ -82,9 +79,6 @@ IMAGE_POST_INTERVAL = 5
 QUOTES_DIR.mkdir(parents=True, exist_ok=True)
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 CHANNELS_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-# تعريف المراقب كمتغير عام
-observer = None
 
 # ===== أدوات JSON =====
 def load_json(file_path: Path, default_value: Any = None) -> Any:
@@ -276,7 +270,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton(f"{status_emoji} التلقائي", callback_data="toggle_schedule")
             ],
             [
-                InlineKeyboardButton("📤 نشر ", callback_data="post_custom_text"),
+                InlineKeyboardButton("📤 نشر نص", callback_data="post_custom_text"),
                 InlineKeyboardButton("🖼️ نشر صورة", callback_data="post_custom_photo")
             ],
             [
@@ -397,7 +391,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         context.user_data.clear()
-        await update.message.reply_text("⏳ جاري استعادة البيانات... سيتم إعادة تشغيل البوت.")
+        await update.message.reply_text("⏳ جاري استعادة البيانات... سيتم إيقاف البوت.")
         
         temp_zip_path = BASE_DIR / f"restore_{doc.file_name}"
         try:
@@ -424,10 +418,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             temp_zip_path.unlink()
             
-            logger.info("✅ تم استعادة البيانات بنجاح. جاري إعادة التشغيل...")
-            if 'observer' in globals() and observer is not None:
-                observer.stop()
-            raise SystemExit
+            logger.info("✅ تم استعادة البيانات بنجاح. جاري إيقاف التشغيل.")
+            # في الاستضافة لا نعيد التشغيل، بل نوقف ونترك الـ Manager يدير الأمر
+            sys.exit(0)
 
         except Exception as e:
             logger.error(f"❌ خطأ في الاستعادة: {e}")
@@ -929,15 +922,6 @@ async def remove_chat(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_i
         await update.callback_query.answer("⚠️ لم يتم العثور", show_alert=True)
     await manage_channels_menu(update, context)
 
-# ===== فئة المراقب =====
-class CodeChangeHandler(FileSystemEventHandler):
-    def on_modified(self, event):
-        if event.src_path.endswith('.py'):
-            logger.info(f"🔄 تم اكتشاف تغيير في {event.src_path}. جاري إعادة التشغيل...")
-            if 'observer' in globals() and observer is not None:
-                observer.stop()
-            raise SystemExit 
-
 # ===== تحميل المهام =====
 def load_scheduled_jobs(job_queue: JobQueue):
     try:
@@ -975,32 +959,10 @@ def main():
 
     logger.info("✅ البوت جاهز...")
 
-    # --- إعداد المراقب التلقائي (Auto-Restart) ---
-    try:
-        global observer
-        event_handler = CodeChangeHandler()
-        observer = Observer()
-        observer.schedule(event_handler, path='.', recursive=False)
-        observer.start()
-        logger.info("👀 نظام التحديث التلقائي مفعل")
-    except Exception as e:
-        logger.warning(f"⚠️ فشل تشغيل المراقب التلقائي: {e}")
-    # ------------------------------------------------
-
-    try:
-        app.run_polling(drop_pending_updates=True)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        if 'observer' in globals() and observer is not None:
-            observer.stop()
-            observer.join()
+    # تمت إزالة المراقب (Watchdog) وعدم وجود حلقة while True
+    # البوت يعمل كعملية واحدة موجهة للاستضافة
+    
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
-    while True:
-        try:
-            main()
-        except Exception as e:
-            logger.error(f"❌ البوت توقف بسبب خطأ: {e}")
-            logger.info("🔄 إعادة المحاولة بعد 5 ثواني...")
-            time.sleep(5)
+    main()
