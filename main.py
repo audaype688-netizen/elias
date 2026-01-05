@@ -131,6 +131,7 @@ def load_channels_data() -> List[Dict]:
     # حماية إضافية من فقدان البيانات
     if not data:
         logger.warning("⚠️ بيانات القنوات فارغة.")
+        return []
     
     if isinstance(data[0], str) if data else False:
         logger.info("🔄 تحويل بيانات القنوات من البنية القديمة...")
@@ -264,6 +265,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status_emoji = "🟢" if is_enabled else "🔴"
         status_text = "مفعل" if is_enabled else "معطل"
 
+        # قائمة الأزرار المصححة بالكامل
         keyboard = [
             [
                 InlineKeyboardButton("📊 إحصائيات", callback_data="show_stats"),
@@ -283,7 +285,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ],
             [
                 InlineKeyboardButton("🗑️ مسح السجل", callback_data="reset_posted_log"),
-                InlineKeyboardButton("💾 استعادة نسخة", callback_data="restore_backup")
+                InlineKeyboardButton("💾 نسخة احتياطية", callback_data="backup_now"),
+                InlineKeyboardButton("♻️ استعادة نسخة", callback_data="restore_backup")
             ]
         ]
         text = "<blockquote>لوحة التحكم 🎛️</blockquote>"
@@ -419,7 +422,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             temp_zip_path.unlink()
             
             logger.info("✅ تم استعادة البيانات بنجاح. جاري إيقاف التشغيل.")
-            # في الاستضافة لا نعيد التشغيل، بل نوقف ونترك الـ Manager يدير الأمر
             sys.exit(0)
 
         except Exception as e:
@@ -557,6 +559,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif action == "reset_posted_log":
             save_json(POSTED_QUOTES_FILE, [])
             await query.answer("✅ تم مسح السجل", show_alert=True)
+        elif action == "backup_now":
+            await manual_backup(update, context)
         elif action == "restore_backup":
             await query.edit_message_text("📂 أرسل ملف النسخة الاحتياطية (.zip) لاستعادة البيانات:")
             context.user_data["action"] = "awaiting_restore_file"
@@ -722,7 +726,7 @@ async def manual_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.answer("❌ فشلت العملية!", show_alert=True)
 
 async def backup_job(context: ContextTypes.DEFAULT_TYPE):
-    logger.info("💾 بدء النسخ الاحتياطي...")
+    logger.info("💾 بدء النسخ الاحتياطي الدوري (كل 6 ساعات)...")
     try:
         temp_zip = Path(f"daily_backup_{int(time.time())}.zip")
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -741,7 +745,7 @@ async def backup_job(context: ContextTypes.DEFAULT_TYPE):
             caption=f"📅 نسخة احتياطية دورية: {time.strftime('%Y-%m-%d %H:%M')}"
         )
         temp_zip.unlink()
-        logger.info("✅ تم النسخ الاحتياطي الدوري")
+        logger.info("✅ تم النسخ الاحتياطي الدوري بنجاح")
     except Exception as e:
         logger.error(f"❌ خطأ في النسخ الاحتياطي: {e}")
 
@@ -777,7 +781,7 @@ async def scheduled_post(context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"💬 الاقتباس: {message_text[:50]}... | نوع المنشور: {'صورة' if should_post_image else 'نص'}")
 
         async def send_content(bot, chat_info: Dict, text: str, is_image: bool) -> bool:
-            max_retries = 3 
+            max_retries = 3
             chat_id = int(chat_info["id"])
             
             for attempt in range(max_retries):
@@ -958,10 +962,8 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler))
 
     logger.info("✅ البوت جاهز...")
-
-    # تمت إزالة المراقب (Watchdog) وعدم وجود حلقة while True
-    # البوت يعمل كعملية واحدة موجهة للاستضافة
     
+    # البوت يعمل في الاستضافة بدون حلقة تكرار أو مراقبة
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
