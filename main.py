@@ -304,6 +304,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # تحقق جديد لمنع الخطأ عند استقبال رسائل بدون مستخدم (مثل رسائل القنوات)
+    if not update.effective_user:
+        return
+
     user_id = update.effective_user.id
     text = update.message.text
     document = update.message.document
