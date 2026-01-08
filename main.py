@@ -305,7 +305,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text
     document = update.message.document
-    forward_from = update.message.forward_from_chat
+    
+    # تعديل: التحقق من وجود forward_from_chat قبل تعيينه لتفادي الخطأ
+    forward_from = None
+    if update.message.forward_from_chat:
+        forward_from = update.message.forward_from_chat
     
     # تحديد الرول
     if user_id == config.DEVELOPER_ID: role = "dev"
@@ -366,10 +370,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         channel_id = None
         title = ""
         
+        # التحقق من وجود تحويلة
         if forward_from:
             channel_id = forward_from.id
             title = forward_from.title
-        elif text.startswith("@") or text.startswith("-100"):
+        elif text and (text.startswith("@") or text.startswith("-100")):
             try:
                 chat = await context.bot.get_chat(text)
                 channel_id = chat.id
@@ -379,6 +384,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(msg, reply_markup=get_back_keyboard(role))
                 return
         else:
+            # إذا لم يرسل تحويلة ولا معرف صحيح، لا نفعل شيئاً (ننتظر رسالة صحيحة)
             return
 
         is_bot_admin = await is_user_admin_in_channel(context.bot, user_id, channel_id)
