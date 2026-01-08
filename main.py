@@ -31,9 +31,11 @@ try:
         api_hash=config.API_HASH,
         bot_token=config.TOKEN
     )
+    pyrogram_available = True
 except AttributeError:
     app_client = None
-    print("تنبيه: API_ID/Hash غير موجودين في config.py.")
+    pyrogram_available = False
+    print("تنبيه: API_ID أو API_HASH غير موجودين في config.py. سيتم تجاهل Pyrogram.")
 
 # --- دوال مساعدة ---
 
@@ -70,7 +72,7 @@ def get_dev_keyboard():
         [InlineKeyboardButton("➕ إضافة قناة اشتراك إجباري", callback_data="add_force_sub")],
         [InlineKeyboardButton("📂 إدارة الملفات", callback_data="manage_files")],
         [InlineKeyboardButton("👥 إدارة المشرفين", callback_data="manage_admins")],
-        [InlineKeyboardButton("➕ إضافة قناة نشر", callback_data="add_channel_prompt")], # تمت الإضافة
+        [InlineKeyboardButton("➕ إضافة قناة نشر", callback_data="add_channel_prompt")],
         [InlineKeyboardButton("📊 الإحصائيات", callback_data="show_stats")],
         [InlineKeyboardButton("🔊 إرسال إذاعة", callback_data="broadcast_menu")],
         [InlineKeyboardButton("⚙️ تفعيل/ايقاف النشر", callback_data="toggle_posting")],
@@ -81,7 +83,7 @@ def get_dev_keyboard():
 def get_admin_keyboard():
     keyboard = [
         [InlineKeyboardButton("📂 إدارة الملفات", callback_data="manage_files")],
-        [InlineKeyboardButton("➕ إضافة قناة نشر", callback_data="add_channel_prompt")], # موجود بالفعل
+        [InlineKeyboardButton("➕ إضافة قناة نشر", callback_data="add_channel_prompt")],
         [InlineKeyboardButton("📊 الإحصائيات", callback_data="show_stats")],
         [InlineKeyboardButton("🔊 إرسال إذاعة", callback_data="broadcast_menu")],
         [InlineKeyboardButton("⚙️ تفعيل/ايقاف النشر", callback_data="toggle_posting")],
@@ -106,7 +108,7 @@ def get_categories_keyboard():
         [InlineKeyboardButton("🎂 عيد ميلاد", callback_data="cat_عيد ميلاد")],
         [InlineKeyboardButton("💭 اقتباسات عامة", callback_data="cat_اقتباسات عامة")],
         [InlineKeyboardButton("📜 ابيات شعرية", callback_data="cat_ابيات شعرية")],
-        [InlineKeyboardButton("🔙 رجوع", callback_data="back_home")] # زر رجوع
+        [InlineKeyboardButton("🔙 رجوع", callback_data="back_home")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -114,7 +116,7 @@ def get_format_keyboard():
     keyboard = [
         [InlineKeyboardButton("📝 رسالة عادية", callback_data="fmt_normal")],
         [InlineKeyboardButton("💎 Blockquote", callback_data="fmt_blockquote")],
-        [InlineKeyboardButton("🔙 رجوع", callback_data="back_home")] # زر رجوع
+        [InlineKeyboardButton("🔙 رجوع", callback_data="back_home")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -500,6 +502,7 @@ async def post_job(context: ContextTypes.DEFAULT_TYPE, force_one=False):
                 continue
 
             if channel.msg_format == 'blockquote':
+                # تنسيق HTML للـ Blockquote
                 text = f"<blockquote>{text}</blockquote>"
                 parse_mode = 'HTML'
             else:
@@ -555,6 +558,13 @@ def main():
     application.run_polling()
 
 if __name__ == '__main__':
-    if hasattr(config, 'API_ID'):
-        app_client.start()
+    # تشغيل Pyrogram إذا كانت البيانات متوفرة، مع منع الأخطاء من إيقاف البوت
+    if hasattr(config, 'API_ID') and hasattr(config, 'API_HASH'):
+        if config.API_ID and config.API_HASH:
+            try:
+                app_client.start()
+            except Exception as e:
+                print(f"Warning: Pyrogram failed to start: {e}")
+                print("Continuing with python-telegram-bot only...")
+    
     main()
