@@ -1,7 +1,7 @@
 # config.py
 
 # ضع هنا توكن البوت الذي حصلت عليه من BotFather
-TOKEN = "2077960206:AAFIZJ-ykAifpCxhI32xrGBRbkIollaqq5U"
+TOKEN = "2077960206:AAHqF9Ym_HYBXL0HDTq7YqfX7vKwdDWi7hg"
 
 # ضع هنا رقم الآيدي الخاص بك (ID المطور) لتتمكن من لوحة التحكم الكاملة
 DEVELOPER_ID = 778375826  # استبدل الرقم الموجود برقم آيدك
