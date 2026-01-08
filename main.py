@@ -69,8 +69,8 @@ async def send_notification_to_admins(context: ContextTypes.DEFAULT_TYPE, messag
 
 def get_dev_keyboard():
     keyboard = [
-        # تمت إزالة زر إضافة قناة اشتراك إجباري
         [InlineKeyboardButton("📂 إدارة الملفات", callback_data="manage_files")],
+        [InlineKeyboardButton("🔧 إدارة القنوات", callback_data="manage_channels")],
         [InlineKeyboardButton("👥 إدارة المشرفين", callback_data="manage_admins")],
         [InlineKeyboardButton("➕ إضافة قناة نشر", callback_data="add_channel_prompt")],
         [InlineKeyboardButton("📊 الإحصائيات", callback_data="show_stats")],
@@ -83,6 +83,7 @@ def get_dev_keyboard():
 def get_admin_keyboard():
     keyboard = [
         [InlineKeyboardButton("📂 إدارة الملفات", callback_data="manage_files")],
+        [InlineKeyboardButton("🔧 إدارة القنوات", callback_data="manage_channels")], # تمت الإضافة
         [InlineKeyboardButton("➕ إضافة قناة نشر", callback_data="add_channel_prompt")],
         [InlineKeyboardButton("📊 الإحصائيات", callback_data="show_stats")],
         [InlineKeyboardButton("🔊 إرسال إذاعة", callback_data="broadcast_menu")],
@@ -184,6 +185,112 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif db.is_admin(user_id): role = "admin"
     else: role = "user"
 
+    # --- إدارة القنوات (جديد) ---
+    if data == "manage_channels":
+        # التحقق من الصلاحيات (المطور والمشرف فقط)
+        if not (user_id == config.DEVELOPER_ID or db.is_admin(user_id)):
+            return
+        
+        session = db.Session()
+        channels = session.query(db.Channel).all()
+        
+        if not channels:
+            await query.edit_message_text("لا توجد قنوات مضافة حالياً.", reply_markup=get_back_keyboard(role))
+            session.close()
+            return
+        
+        keyboard = []
+        for ch in channels:
+            # زر واحد يحتوي على معرف القناة واسمها
+            btn_text = f"{ch.title} ({ch.category})"
+            keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"edit_channel_{ch.id}")])
+        
+        keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data=f"back_{role}")])
+        await query.edit_message_text("اختر قناة لإعداداتها:", reply_markup=InlineKeyboardMarkup(keyboard))
+        session.close()
+
+    if data.startswith("edit_channel_"):
+        # التحقق من الصلاحيات
+        if not (user_id == config.DEVELOPER_ID or db.is_admin(user_id)):
+            return
+        
+        ch_id = int(data.split("_")[2])
+        
+        # حفظ القناة المختارة حالياً للتعديل عليها
+        context.user_data['editing_channel_id'] = ch_id
+        
+        keyboard = [
+            [InlineKeyboardButton("🔄 تغيير نوع المحتوى", callback_data="change_cat_select")],
+            [InlineKeyboardButton("🎨 تغيير شكل الرسالة", callback_data="change_fmt_select")],
+            [InlineKeyboardButton("🗑️ حذف القناة", callback_data="confirm_del_channel")],
+            [InlineKeyboardButton("🔙 رجوع", callback_data="manage_channels")]
+        ]
+        await query.edit_message_text("خيارات القناة:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    if data == "confirm_del_channel":
+        ch_id = context.user_data.get('editing_channel_id')
+        if not ch_id: return
+        
+        keyboard = [
+            [InlineKeyboardButton("❌ لا، ارجع", callback_data=f"edit_channel_{ch_id}")],
+            [InlineKeyboardButton("✅ نعم، احذف القناة", callback_data=f"delete_channel_{ch_id}")]
+        ]
+        await query.edit_message_text("⚠️ هل أنت متأكد من حذف هذه القناة من النظام؟", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    if data.startswith("delete_channel_"):
+        ch_id = int(data.split("_")[2])
+        session = db.Session()
+        ch = session.query(db.Channel).filter_by(id=ch_id).first()
+        if ch:
+            session.delete(ch)
+            session.commit()
+            msg = f"✅ تم حذف القناة <b>{ch.title}</b> بنجاح."
+        else:
+            msg = "❌ لم يتم العثور على القناة."
+        session.close()
+        
+        context.user_data['editing_channel_id'] = None
+        # العودة لقائمة القنوات بعد الحذف
+        # نحتاج لإعادة تشغيل منطق manage_channels هنا أو إرجاعه
+        await query.edit_message_text(msg, parse_mode='HTML', reply_markup=get_back_keyboard(role))
+
+    if data == "change_cat_select":
+        await query.edit_message_text("اختر نوع المحتوى الجديد:", reply_markup=get_categories_keyboard_edit())
+
+    if data == "change_fmt_select":
+        await query.edit_message_text("اختر شكل الرسالة الجديد:", reply_markup=get_format_keyboard_edit())
+
+    # معالجات اختيار الفئة والشكل (للتعديل)
+    if data.startswith("set_edit_cat_"):
+        new_cat = data.split("_")[3]
+        ch_id = context.user_data.get('editing_channel_id')
+        if ch_id:
+            session = db.Session()
+            ch = session.query(db.Channel).filter_by(id=ch_id).first()
+            if ch:
+                ch.category = new_cat
+                session.commit()
+                msg = f"✅ تم تغيير نوع المحتوى إلى <b>{new_cat}</b>."
+            else:
+                msg = "❌ حدث خطأ."
+            session.close()
+        await query.edit_message_text(msg, parse_mode='HTML', reply_markup=get_back_keyboard(role))
+
+    if data.startswith("set_edit_fmt_"):
+        new_fmt = data.split("_")[3]
+        ch_id = context.user_data.get('editing_channel_id')
+        if ch_id:
+            session = db.Session()
+            ch = session.query(db.Channel).filter_by(id=ch_id).first()
+            if ch:
+                ch.msg_format = new_fmt
+                session.commit()
+                msg = f"✅ تم تغيير شكل الرسالة إلى <b>{new_fmt}</b>."
+            else:
+                msg = "❌ حدث خطأ."
+            session.close()
+        await query.edit_message_text(msg, parse_mode='HTML', reply_markup=get_back_keyboard(role))
+
     # --- قسم إدارة المشرفين (للمطور فقط) ---
     if data == "manage_admins":
         if user_id != config.DEVELOPER_ID:
@@ -223,17 +330,20 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- اختيار القسم عند الإضافة ---
     if data.startswith("cat_"):
-        category = data.split("_")[1]
-        context.user_data['selected_category'] = category
-        msg = f"تم اختيار القسم: <b>{category}</b>.\n\nاختر شكل الرسالة:"
-        await query.edit_message_text(msg, parse_mode='HTML', reply_markup=get_format_keyboard())
+        # تجاهل إذا كان cat_ لغرض التعديل (set_edit_cat_)
+        if data.startswith("cat_"): 
+            category = data.split("_")[1]
+            context.user_data['selected_category'] = category
+            msg = f"تم اختيار القسم: <b>{category}</b>.\n\nاختر شكل الرسالة:"
+            await query.edit_message_text(msg, parse_mode='HTML', reply_markup=get_format_keyboard())
 
     # --- اختيار التنسيق ---
     if data.startswith("fmt_"):
-        fmt = data.split("_")[1]
-        category = context.user_data.get('selected_category')
-        context.user_data['selected_format'] = fmt
-        await query.edit_message_text("اختر طريقة النشر:", reply_markup=get_time_keyboard())
+        if data.startswith("fmt_"):
+            fmt = data.split("_")[1]
+            category = context.user_data.get('selected_category')
+            context.user_data['selected_format'] = fmt
+            await query.edit_message_text("اختر طريقة النشر:", reply_markup=get_time_keyboard())
 
     if data.startswith("time_"):
         time_type = data.split("_")[1]
@@ -539,6 +649,26 @@ async def chat_member_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         
         asyncio.create_task(send_notification_to_admins(context, f"⚠️ تم حذف البوت من <b>{chat_title}</b>"))
         db.remove_channel_db(chat_id)
+
+# --- دوال مساعدة للوحة التعديل (Keyboard functions) ---
+
+def get_categories_keyboard_edit():
+    keyboard = [
+        [InlineKeyboardButton("❤️ حب", callback_data="set_edit_cat_حب")],
+        [InlineKeyboardButton("🎂 عيد ميلاد", callback_data="set_edit_cat_عيد ميلاد")],
+        [InlineKeyboardButton("💭 اقتباسات عامة", callback_data="set_edit_cat_اقتباسات عامة")],
+        [InlineKeyboardButton("📜 ابيات شعرية", callback_data="set_edit_cat_ابيات شعرية")],
+        [InlineKeyboardButton("🔙 رجوع", callback_data=f"edit_channel_{context.user_data.get('editing_channel_id')}")] # رجوع لصفحة القناة
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_format_keyboard_edit():
+    keyboard = [
+        [InlineKeyboardButton("📝 رسالة عادية", callback_data="set_edit_fmt_normal")],
+        [InlineKeyboardButton("💎 Blockquote", callback_data="set_edit_fmt_blockquote")],
+        [InlineKeyboardButton("🔙 رجوع", callback_data=f"edit_channel_{context.user_data.get('editing_channel_id')}")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
 # --- تشغيل البوت ---
 
