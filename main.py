@@ -69,7 +69,7 @@ async def send_notification_to_admins(context: ContextTypes.DEFAULT_TYPE, messag
 
 def get_dev_keyboard():
     keyboard = [
-        [InlineKeyboardButton("➕ إضافة قناة اشتراك إجباري", callback_data="add_force_sub")],
+        # تمت إزالة زر إضافة قناة اشتراك إجباري
         [InlineKeyboardButton("📂 إدارة الملفات", callback_data="manage_files")],
         [InlineKeyboardButton("👥 إدارة المشرفين", callback_data="manage_admins")],
         [InlineKeyboardButton("➕ إضافة قناة نشر", callback_data="add_channel_prompt")],
@@ -312,9 +312,9 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     document = update.message.document
     
-    # تعديل: التحقق من وجود forward_from_chat قبل تعيينه لتفادي الخطأ
+    # التحقق الآمن من وجود التحويل
     forward_from = None
-    if update.message.forward_from_chat:
+    if hasattr(update.message, 'forward_from_chat'):
         forward_from = update.message.forward_from_chat
     
     # تحديد الرول
